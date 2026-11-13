@@ -130,8 +130,13 @@ button, select, input { font: inherit; color: inherit; }
 
 /* ---- レイアウト ---- */
 .page { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px; flex: 1; display: flex; flex-direction: column; gap: 20px; }
-.cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-@media (min-width: 1024px) { .cols { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } }
+.layout { display: flex; flex-direction: column; gap: 20px; }
+.col-left, .col-right { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (min-width: 1024px) {
+  .layout { flex-direction: row; align-items: flex-start; }
+  .col-left { flex: 58 1 0; }
+  .col-right { flex: 42 1 0; }
+}
 
 .card { background: var(--card); border-radius: 20px; padding: 22px; box-shadow: var(--shadow); }
 .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
@@ -214,7 +219,12 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--fill); }
 
 /* ---- 使い方 ---- */
-.guide { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.guide {
+  position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 60;
+  width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto;
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28), 0 0 0 0.5px var(--separator);
+}
 .guide-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: 1fr; flex: 1; min-width: 0; }
 @media (min-width: 720px) { .guide-steps { grid-template-columns: repeat(3, 1fr); } }
 .guide-steps li { display: flex; gap: 12px; }
@@ -328,4 +338,76 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* ---- 1画面に収める（幅1200px以上・高さ680px以上）。それ未満はスクロール ---- */
+@media (min-width: 1200px) and (min-height: 680px) {
+  html, body { height: 100%; overflow: hidden; }
+  body { height: 100vh; height: 100dvh; }
+  .foot, .card-head p, .brand-sub { display: none; }
+
+  .topbar-inner { padding: 6px 16px; max-width: none; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 8px; }
+  h1 { font-size: 15px; }
+  .pill { padding: 3px 10px; }
+  .meter canvas { height: 20px; }
+  .btn { min-height: 30px; padding: 4px 14px; font-size: 12px; }
+
+  .page { flex: 1; min-height: 0; max-width: none; padding: 10px 16px 12px; gap: 0; }
+  .layout { flex: 1; min-height: 0; align-items: stretch; gap: 12px; }
+  .col-left, .col-right { gap: 10px; min-height: 0; }
+
+  .card { padding: 10px 14px; border-radius: 16px; }
+  .card-head { align-items: center; margin-bottom: 8px; gap: 8px; }
+  .head-title { display: flex; align-items: center; gap: 8px; }
+  h2 { font-size: 15px; margin: 0; }
+  .sub { margin: 8px 0 6px; font-size: 12px; }
+  .badge { padding: 2px 10px; font-size: 11px; }
+
+  /* 左: 音色 + 鍵盤 + ミキサー */
+  .step1 { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .controls { gap: 8px; }
+  .stepper .num { min-width: 76px; }
+  .stepper button { width: 26px; height: 26px; }
+  .inst-grid { grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 8px; }
+  .inst-card { padding: 6px 8px; gap: 6px; border-radius: 10px; }
+  .inst-icon { width: auto; height: auto; background: none; box-shadow: none; font-size: 18px; }
+  .inst-en, .inst-num { display: none; }
+  .inst-name { font-size: 11px; -webkit-line-clamp: 3; line-clamp: 3; }
+  .piano { flex: 1; height: auto; min-height: 90px; padding: 8px 8px 10px; }
+  .black-keys-layer { top: 8px; left: 8px; right: 8px; }
+  .piano-foot { margin-top: 6px; font-size: 11px; }
+  .mixer-card { flex: none; }
+  .mixer-row { padding: 3px 12px; gap: 6px 10px; }
+  .mixer-name { min-width: 128px; font-size: 12px; }
+  .mixer-row .select { width: 150px; padding: 3px 24px 3px 8px; }
+  .mixer-vol input { height: 22px; }
+  .ms-btn { width: 26px; height: 26px; }
+
+  /* 右: フレーズ + 自動アレンジ */
+  .inset { padding: 8px 10px; }
+  .status { margin: 6px 0; padding: 4px 10px; }
+  .caption-row { margin-bottom: 4px; }
+  .roll { height: 48px; }
+  .preset-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .preset-btn { padding: 6px 8px; font-size: 12px; border-radius: 10px; }
+  .preset-btn .muted { display: none; }
+  .analysis { margin-top: 8px; padding: 6px 10px; font-size: 12px; }
+  .arrange { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .arrange-controls { gap: 6px 12px; margin-bottom: 8px; }
+  .field-label { margin-bottom: 3px; }
+  .segment button { padding: 4px 2px; }
+  input[type='range'] { height: 22px; }
+  .btn.big { min-height: 34px; font-size: 14px; }
+  .transport { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
+  .time { font-size: 15px; }
+  .sections { margin: 8px 0 2px; }
+  .timeline { flex: 1; height: auto; min-height: 20px; }
+}
+
+/* 背の高い画面では、余白を鍵盤・ピアノロール・タイムラインに配分する */
+@media (min-width: 1200px) and (min-height: 680px) {
+  .piano { max-height: 52vh; }
+  .roll { height: clamp(48px, 6vh, 100px); }
+  .timeline { max-height: 160px; }
 }

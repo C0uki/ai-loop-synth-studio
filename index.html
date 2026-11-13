@@ -41,149 +41,153 @@
     <span class="toast-dot"></span><span id="toastText">準備完了</span>
   </div>
 
+  <!-- 使い方（ボタンで開くパネル。画面の場所は取らない） -->
+  <section id="guidePanel" class="card guide" hidden>
+    <ol class="guide-steps">
+      <li><span class="step-no">1</span><div><h3>11種類の音色で演奏</h3><p>ピアノ＋10種類のシンセ・楽器から選び、画面の鍵盤か PC キー（A〜K）で弾けます。</p></div></li>
+      <li><span class="step-no">2</span><div><h3>短いフレーズを録音・選択</h3><p>2小節のフレーズを弾いて録音するか、サンプルをワンクリックで読み込みます。</p></div></li>
+      <li><span class="step-no">3</span><div><h3>約1分のループを自動生成</h3><p>コード・ベース・ドラム・アルペジオを自動で編曲。32小節（約64秒）のループが完成します。</p></div></li>
+    </ol>
+    <button id="closeGuideBtn" type="button" class="btn ghost">閉じる</button>
+  </section>
+
   <main class="page">
-    <section id="guidePanel" class="card guide">
-      <ol class="guide-steps">
-        <li><span class="step-no">1</span><div><h3>11種類の音色で演奏</h3><p>ピアノ＋10種類のシンセ・楽器から選び、画面の鍵盤か PC キー（A〜K）で弾けます。</p></div></li>
-        <li><span class="step-no">2</span><div><h3>短いフレーズを録音・選択</h3><p>2小節のフレーズを弾いて録音するか、サンプルをワンクリックで読み込みます。</p></div></li>
-        <li><span class="step-no">3</span><div><h3>約1分のループを自動生成</h3><p>コード・ベース・ドラム・アルペジオを自動で編曲。32小節（約64秒）のループが完成します。</p></div></li>
-      </ol>
-      <button id="closeGuideBtn" type="button" class="btn ghost">閉じる</button>
-    </section>
-
-    <!-- STEP 1 -->
-    <section class="card">
-      <div class="card-head">
-        <div>
-          <span class="step-chip">STEP 1</span>
-          <h2>音色を選んで演奏</h2>
-          <p class="muted">Web Audio API でリアルタイムに合成。選んだ音色が鍵盤・録音・リードに使われます。</p>
-        </div>
-        <div class="controls">
-          <div class="stepper" role="group" aria-label="オクターブ">
-            <button id="octDownBtn" type="button" aria-label="オクターブを下げる">−</button>
-            <span id="octaveDisplay" class="num">C3 – B4</span>
-            <button id="octUpBtn" type="button" aria-label="オクターブを上げる">＋</button>
-          </div>
-          <button id="sustainBtn" type="button" class="switch-btn" role="switch" aria-pressed="false"><span class="switch"></span>サステイン</button>
-          <button id="keyHintToggleBtn" type="button" class="switch-btn" role="switch" aria-pressed="true"><span class="switch"></span>PCキー表示</button>
-        </div>
-      </div>
-
-      <div id="instrumentGrid" class="inst-grid"></div>
-
-      <div class="piano" id="pianoContainer">
-        <div class="white-keys-layer" id="whiteKeysLayer"></div>
-        <div class="black-keys-layer" id="blackKeysLayer"></div>
-      </div>
-      <div class="piano-foot">
-        <span class="muted">PCキー: <kbd>A</kbd>〜<kbd>K</kbd> 白鍵 / <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> 黒鍵 / <kbd>Z</kbd> <kbd>X</kbd> オクターブ</span>
-        <span id="currentInstDesc" class="accent">選択中: グランドピアノ</span>
-      </div>
-    </section>
-
-    <div class="cols">
-      <!-- STEP 2 -->
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <span class="step-chip orange">STEP 2</span>
-            <h2>元フレーズ</h2>
-            <p class="muted">鍵盤で2小節を録音するか、サンプルを選んで自動アレンジの種にします。</p>
-          </div>
-          <span id="phraseBarsBadge" class="badge num">2小節 (8拍)</span>
-        </div>
-
-        <div class="inset">
-          <div class="row between">
-            <div class="row">
-              <button id="recordPhraseBtn" type="button" class="btn rec"><span id="recIndicator" class="rec-dot"></span><span id="recBtnLabel">フレーズ録音 (2小節)</span></button>
-              <button id="previewPhraseBtn" type="button" class="btn">▶ 試聴</button>
+    <div class="layout">
+      <!-- 左: 音色・鍵盤・ミキサー -->
+      <div class="col-left">
+        <section class="card step1">
+          <div class="card-head">
+            <div class="head-main">
+              <div class="head-title"><span class="step-chip">STEP 1</span><h2>音色を選んで演奏</h2></div>
+              <p class="muted">Web Audio API でリアルタイムに合成。選んだ音色が鍵盤・録音・リードに使われます。</p>
             </div>
-            <button id="clearPhraseBtn" type="button" class="btn ghost">クリア</button>
-          </div>
-
-          <div class="status">
-            <span id="recStatusText">待機中: 録音ボタンを押すと4カウント後に開始します</span>
-            <div id="beatDots" class="beat-dots" aria-hidden="true"><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span></div>
-          </div>
-
-          <div class="row between caption-row">
-            <span class="muted">入力済みフレーズ (<span id="phraseNoteCount" class="num accent">0</span> 音)</span>
-            <label class="check"><input id="quantizeCheck" type="checkbox" checked /><span>16分音符にクオンタイズ</span></label>
-          </div>
-          <canvas id="phraseCanvas" class="roll" aria-label="フレーズのピアノロール"></canvas>
-        </div>
-
-        <h3 class="sub">サンプルフレーズ</h3>
-        <div id="presetMotifGrid" class="preset-grid"></div>
-
-        <div class="analysis">
-          <div><span class="muted">推定キー</span> <strong id="detectedKeyLabel">C Major</strong></div>
-          <div class="right"><span class="muted">コード進行</span> <strong id="detectedChordsLabel" class="num purple">F - G - Em - Am</strong></div>
-        </div>
-      </section>
-
-      <!-- STEP 3 -->
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <span class="step-chip purple">STEP 3</span>
-            <h2>自動アレンジ ＆ ループ</h2>
-          </div>
-          <span id="loopDurationBadge" class="badge num green">32小節 / 01:04 (64秒)</span>
-        </div>
-
-        <div class="arrange-controls">
-          <div>
-            <div class="field-label">ジャンル</div>
-            <div id="styleSegment" class="segment" role="group" aria-label="アレンジのジャンル">
-              <button type="button" data-style="pop" aria-pressed="true">ポップ</button>
-              <button type="button" data-style="lofi" aria-pressed="false">Lo-Fi</button>
-              <button type="button" data-style="synthwave" aria-pressed="false">シンセウェーブ</button>
-              <button type="button" data-style="fusion" aria-pressed="false">フュージョン</button>
-            </div>
-          </div>
-          <div>
-            <div class="field-label row between"><span>テンポ</span><span class="num accent"><span id="bpmValueLabel">120</span> BPM</span></div>
-            <input id="bpmSlider" type="range" min="96" max="136" step="2" value="120" aria-label="テンポ (BPM)" />
-          </div>
-          <button id="generateLoopBtn" type="button" class="btn primary big">約1分のループを自動生成</button>
-        </div>
-
-        <div class="inset transport">
-          <div class="row between wrap">
-            <div class="row wrap">
-              <button id="playLoopBtn" type="button" class="btn primary"><span id="playLoopIcon" aria-hidden="true">▶</span><span id="playLoopText">ループ再生</span></button>
-              <button id="stopLoopBtn" type="button" class="btn">■ 停止</button>
-              <label class="check"><input id="seamlessLoopToggle" type="checkbox" checked /><span>シームレスループ</span></label>
-            </div>
-            <div class="row">
-              <div class="right">
-                <div id="timeDisplay" class="num time">00:00 / 01:04</div>
-                <div id="barSectionDisplay" class="caption purple">Bar 1 / 32 — Intro</div>
+            <div class="controls">
+              <div class="stepper" role="group" aria-label="オクターブ">
+                <button id="octDownBtn" type="button" aria-label="オクターブを下げる">−</button>
+                <span id="octaveDisplay" class="num">C3 – B4</span>
+                <button id="octUpBtn" type="button" aria-label="オクターブを上げる">＋</button>
               </div>
-              <button id="exportWavBtn" type="button" class="btn" title="生成したループを WAV ファイルとして保存">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
-                <span id="exportWavLabel">WAV保存</span>
-              </button>
+              <button id="sustainBtn" type="button" class="switch-btn" role="switch" aria-pressed="false"><span class="switch"></span>サステイン</button>
+              <button id="keyHintToggleBtn" type="button" class="switch-btn" role="switch" aria-pressed="true"><span class="switch"></span>PCキー表示</button>
             </div>
           </div>
 
-          <div class="sections" id="sectionHeaders" aria-hidden="true">
-            <span style="--c:var(--label-secondary);flex:4">Intro</span>
-            <span style="--c:var(--blue);flex:8">Verse</span>
-            <span style="--c:var(--orange);flex:4">Build</span>
-            <span style="--c:var(--purple);flex:8">Chorus</span>
-            <span style="--c:var(--pink);flex:4">Solo</span>
-            <span style="--c:var(--green);flex:4">Outro</span>
-          </div>
-          <div id="timelineBarsGrid" class="timeline"></div>
-        </div>
+          <div id="instrumentGrid" class="inst-grid"></div>
 
-        <div class="mixer-head"><h3 class="sub">ミキサー（全5パート）</h3><span class="muted caption">M = ミュート / S = ソロ</span></div>
-        <div id="mixerTracksContainer" class="mixer"></div>
-      </section>
+          <div class="piano" id="pianoContainer">
+            <div class="white-keys-layer" id="whiteKeysLayer"></div>
+            <div class="black-keys-layer" id="blackKeysLayer"></div>
+          </div>
+          <div class="piano-foot">
+            <span class="muted">PCキー: <kbd>A</kbd>〜<kbd>K</kbd> 白鍵 / <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> 黒鍵 / <kbd>Z</kbd> <kbd>X</kbd> オクターブ</span>
+            <span id="currentInstDesc" class="accent">選択中: グランドピアノ</span>
+          </div>
+        </section>
+
+        <section class="card mixer-card">
+          <div class="card-head">
+            <div class="head-main"><div class="head-title"><h2>ミキサー（全5パート）</h2></div></div>
+            <span class="muted caption">M = ミュート / S = ソロ</span>
+          </div>
+          <div id="mixerTracksContainer" class="mixer"></div>
+        </section>
+      </div>
+
+      <!-- 右: フレーズ・自動アレンジ -->
+      <div class="col-right">
+        <section class="card">
+          <div class="card-head">
+            <div class="head-main">
+              <div class="head-title"><span class="step-chip orange">STEP 2</span><h2>元フレーズ</h2></div>
+              <p class="muted">鍵盤で2小節を録音するか、サンプルを選んで自動アレンジの種にします。</p>
+            </div>
+            <span id="phraseBarsBadge" class="badge num">2小節 (8拍)</span>
+          </div>
+
+          <div class="inset">
+            <div class="row between">
+              <div class="row">
+                <button id="recordPhraseBtn" type="button" class="btn rec"><span id="recIndicator" class="rec-dot"></span><span id="recBtnLabel">フレーズ録音 (2小節)</span></button>
+                <button id="previewPhraseBtn" type="button" class="btn">▶ 試聴</button>
+              </div>
+              <button id="clearPhraseBtn" type="button" class="btn ghost">クリア</button>
+            </div>
+
+            <div class="status">
+              <span id="recStatusText">待機中: 録音ボタンを押すと4カウント後に開始します</span>
+              <div id="beatDots" class="beat-dots" aria-hidden="true"><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span></div>
+            </div>
+
+            <div class="row between caption-row">
+              <span class="muted">入力済みフレーズ (<span id="phraseNoteCount" class="num accent">0</span> 音)</span>
+              <label class="check"><input id="quantizeCheck" type="checkbox" checked /><span>16分音符にクオンタイズ</span></label>
+            </div>
+            <canvas id="phraseCanvas" class="roll" aria-label="フレーズのピアノロール"></canvas>
+          </div>
+
+          <h3 class="sub">サンプルフレーズ</h3>
+          <div id="presetMotifGrid" class="preset-grid"></div>
+
+          <div class="analysis">
+            <div><span class="muted">推定キー</span> <strong id="detectedKeyLabel">C Major</strong></div>
+            <div class="right"><span class="muted">コード進行</span> <strong id="detectedChordsLabel" class="num purple">F - G - Em - Am</strong></div>
+          </div>
+        </section>
+
+        <section class="card arrange">
+          <div class="card-head">
+            <div class="head-main"><div class="head-title"><span class="step-chip purple">STEP 3</span><h2>自動アレンジ ＆ ループ</h2></div></div>
+            <span id="loopDurationBadge" class="badge num green">32小節 / 01:04 (64秒)</span>
+          </div>
+
+          <div class="arrange-controls">
+            <div>
+              <div class="field-label">ジャンル</div>
+              <div id="styleSegment" class="segment" role="group" aria-label="アレンジのジャンル">
+                <button type="button" data-style="pop" aria-pressed="true">ポップ</button>
+                <button type="button" data-style="lofi" aria-pressed="false">Lo-Fi</button>
+                <button type="button" data-style="synthwave" aria-pressed="false">シンセウェーブ</button>
+                <button type="button" data-style="fusion" aria-pressed="false">フュージョン</button>
+              </div>
+            </div>
+            <div>
+              <div class="field-label row between"><span>テンポ</span><span class="num accent"><span id="bpmValueLabel">120</span> BPM</span></div>
+              <input id="bpmSlider" type="range" min="96" max="136" step="2" value="120" aria-label="テンポ (BPM)" />
+            </div>
+            <button id="generateLoopBtn" type="button" class="btn primary big">約1分のループを自動生成</button>
+          </div>
+
+          <div class="inset transport">
+            <div class="row between wrap">
+              <div class="row wrap">
+                <button id="playLoopBtn" type="button" class="btn primary"><span id="playLoopIcon" aria-hidden="true">▶</span><span id="playLoopText">ループ再生</span></button>
+                <button id="stopLoopBtn" type="button" class="btn">■ 停止</button>
+                <label class="check"><input id="seamlessLoopToggle" type="checkbox" checked /><span>シームレスループ</span></label>
+              </div>
+              <div class="row">
+                <div class="right">
+                  <div id="timeDisplay" class="num time">00:00 / 01:04</div>
+                  <div id="barSectionDisplay" class="caption purple">Bar 1 / 32 — Intro</div>
+                </div>
+                <button id="exportWavBtn" type="button" class="btn" title="生成したループを WAV ファイルとして保存">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+                  <span id="exportWavLabel">WAV保存</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="sections" id="sectionHeaders" aria-hidden="true">
+              <span style="--c:var(--label-secondary);flex:4">Intro</span>
+              <span style="--c:var(--blue);flex:8">Verse</span>
+              <span style="--c:var(--orange);flex:4">Build</span>
+              <span style="--c:var(--purple);flex:8">Chorus</span>
+              <span style="--c:var(--pink);flex:4">Solo</span>
+              <span style="--c:var(--green);flex:4">Outro</span>
+            </div>
+            <div id="timelineBarsGrid" class="timeline"></div>
+          </div>
+        </section>
+      </div>
     </div>
   </main>
 
