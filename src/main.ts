@@ -1,8 +1,8 @@
 import './style.css';
-import { PC_KEY_MAP, $, drawPhraseRoll, loadPresetMotif, playLiveNote, regenerate, releaseLiveNote, renderInstrumentGrid, renderMixerTracks, renderPianoKeyboard, renderPresetMotifs, renderTimelineBars, setStyleSegment, showToast, startVisualizerLoop, updateLoopDurationBadge } from './ui';
+import { PC_KEY_MAP, $, drawPhraseRoll, loadPresetMotif, playLiveNote, regenerate, releaseLiveNote, renderInstrumentSelect, renderMixerTracks, renderPianoKeyboard, renderPresetMotifs, renderTimelineBars, setStyleSegment, updateTimeDisplay } from './ui';
 import { exportLoopToWav, startLoopPlayback, stopLoopPlayback } from './player';
-import { clearPhrase, previewSeedPhrase, startPhraseRecording } from './recorder';
-import { getTotalLoopSeconds, state } from './state';
+import { startPhraseRecording } from './recorder';
+import { state } from './state';
 import type { StyleId } from './types';
 
 // ---- PCキーボード演奏 ----
@@ -12,9 +12,16 @@ const shiftOctave = (delta: number): void => {
   renderPianoKeyboard();
 };
 
+/** 文字を打つ欄やプルダウンを操作中は、鍵盤として扱わない（スライダーは除く）。 */
+const isTyping = (): boolean => {
+  const el = document.activeElement;
+  if (!el) return false;
+  if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && !['range', 'checkbox'].includes((el as HTMLInputElement).type);
+};
+
 window.addEventListener('keydown', e => {
-  const tag = document.activeElement?.tagName ?? '';
-  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || ['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || isTyping()) return;
   const key = e.key.toLowerCase();
 
   if (key === 'z') return shiftOctave(-1);
@@ -35,81 +42,72 @@ window.addEventListener('keyup', e => {
 });
 
 // ---- 初期化 ----
-renderInstrumentGrid();
+renderInstrumentSelect();
 renderPianoKeyboard();
-renderPresetMotifs();
+renderPresetMotifs(id => {
+  loadPresetMotif(id);
+  startLoopPlayback(0); // 選んだらすぐ聴ける
+});
 renderTimelineBars(bar => startLoopPlayback(bar));
 renderMixerTracks();
-startVisualizerLoop();
-loadPresetMotif('pop_dream', true); // すぐ再生・生成できるよう初期フレーズを読み込む
+loadPresetMotif('pop_dream', true); // 最初から再生できるよう、初期フレーズを読み込む
 
-// マスター音量
+// 音量
 $<HTMLInputElement>('masterVolume').addEventListener('input', e => {
   state.masterVol = parseFloat((e.target as HTMLInputElement).value);
   if (state.masterGain) state.masterGain.gain.value = state.masterVol;
 });
 
-// 使い方パネル
+// 使い方・ミキサーのパネル
 const guide = $('guidePanel');
+const mixer = $('mixerPanel');
 $('toggleGuideBtn').addEventListener('click', () => guide.toggleAttribute('hidden'));
 $('closeGuideBtn').addEventListener('click', () => guide.setAttribute('hidden', ''));
+$('toggleMixerBtn').addEventListener('click', () => mixer.toggleAttribute('hidden'));
+$('closeMixerBtn').addEventListener('click', () => mixer.setAttribute('hidden', ''));
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    guide.setAttribute('hidden', '');
+    mixer.setAttribute('hidden', '');
+  }
+});
 
-// 鍵盤コントロール
+// 鍵盤
 $('octDownBtn').addEventListener('click', () => shiftOctave(-1));
 $('octUpBtn').addEventListener('click', () => shiftOctave(1));
-
 const sustainBtn = $('sustainBtn');
 sustainBtn.addEventListener('click', () => {
   state.sustain = !state.sustain;
   sustainBtn.setAttribute('aria-pressed', String(state.sustain));
-  showToast(`サステイン（余韻）: ${state.sustain ? 'ON' : 'OFF'}`);
 });
 
-const hintBtn = $('keyHintToggleBtn');
-hintBtn.addEventListener('click', () => {
-  state.showKeyHints = !state.showKeyHints;
-  hintBtn.setAttribute('aria-pressed', String(state.showKeyHints));
-  renderPianoKeyboard();
-});
-
-// フレーズ録音
+// 録音
 $('recordPhraseBtn').addEventListener('click', startPhraseRecording);
-$('previewPhraseBtn').addEventListener('click', previewSeedPhrase);
-$('clearPhraseBtn').addEventListener('click', clearPhrase);
 
-// スタイル・BPM
+// ジャンル・テンポ
 document.querySelectorAll<HTMLButtonElement>('#styleSegment [data-style]').forEach(btn => {
   btn.addEventListener('click', () => {
     state.style = btn.dataset.style as StyleId;
     setStyleSegment(state.style);
     regenerate();
-    showToast('アレンジスタイルを変更し、再編曲しました');
+    if (!state.isPlayingLoop) startLoopPlayback(0);
   });
 });
 
-$<HTMLInputElement>('bpmSlider').addEventListener('input', e => {
-  state.bpm = parseInt((e.target as HTMLInputElement).value, 10);
+const bpmSlider = $<HTMLInputElement>('bpmSlider');
+bpmSlider.addEventListener('input', () => {
+  state.bpm = parseInt(bpmSlider.value, 10);
   $('bpmValueLabel').textContent = String(state.bpm);
-  updateLoopDurationBadge();
+  updateTimeDisplay();
 });
 
-// 生成・再生
-$('generateLoopBtn').addEventListener('click', () => {
-  regenerate();
-  startLoopPlayback(0);
-  showToast(`約${Math.round(getTotalLoopSeconds())}秒（32小節）のループを生成して再生を始めました`);
-});
-
+// 再生・停止・WAV
 $('playLoopBtn').addEventListener('click', () => {
-  if (state.isPlayingLoop) stopLoopPlayback(false);
+  if (state.isPlayingLoop) stopLoopPlayback(true);
   else startLoopPlayback(state.currentBar);
-});
-$('stopLoopBtn').addEventListener('click', () => stopLoopPlayback(true));
-$<HTMLInputElement>('seamlessLoopToggle').addEventListener('change', e => {
-  state.seamlessLoop = (e.target as HTMLInputElement).checked;
 });
 $('exportWavBtn').addEventListener('click', exportLoopToWav);
 
-// 再描画（サイズ変更・ライト/ダーク切替で canvas の色を更新）
+// canvas の再描画（サイズ変更・ライト/ダーク切替）
 window.addEventListener('resize', drawPhraseRoll);
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawPhraseRoll);

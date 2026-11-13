@@ -46,14 +46,12 @@ export function regenerate(): void {
   $('detectedKeyLabel').textContent = scale.name;
   $('detectedChordsLabel').textContent = chordNames.join(' - ');
   renderMixerTracks();
-  updateLoopDurationBadge();
+  updateTimeDisplay();
 }
 
-export function updateLoopDurationBadge(): void {
-  const totalSec = Math.round(getTotalLoopSeconds());
-  $('loopDurationBadge').textContent = `${state.totalBars}小節 / ${formatTimeMMSS(totalSec)} (${totalSec}秒)`;
+export function updateTimeDisplay(): void {
   if (!state.isPlayingLoop) {
-    $('timeDisplay').textContent = `00:00 / ${formatTimeMMSS(totalSec)}`;
+    $('timeDisplay').textContent = `00:00 / ${formatTimeMMSS(Math.round(getTotalLoopSeconds()))}`;
   }
 }
 
@@ -88,25 +86,13 @@ export function loadPresetMotif(motifId: string, silent = false): void {
 // -----------------------------------------------------------------------------
 // 音色グリッド・プリセット
 // -----------------------------------------------------------------------------
-export function renderInstrumentGrid(): void {
-  const grid = $('instrumentGrid');
-  grid.innerHTML = '';
-  INSTRUMENTS.forEach((inst, idx) => {
-    const selected = inst.id === state.selectedInstrument;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'inst-card';
-    btn.setAttribute('aria-pressed', String(selected));
-    btn.innerHTML = `
-      <span class="inst-icon" aria-hidden="true">${inst.icon}</span>
-      <span class="inst-text">
-        <span class="inst-name">${inst.name}</span>
-        <span class="inst-en">${inst.en}</span>
-      </span>
-      <span class="inst-num num">${idx + 1}</span>
-    `;
-    btn.addEventListener('click', () => selectInstrument(inst.id));
-    grid.appendChild(btn);
+export function renderInstrumentSelect(): void {
+  const sel = $<HTMLSelectElement>('instrumentSelect');
+  sel.innerHTML = INSTRUMENTS.map(i => `<option value="${i.id}">${i.icon} ${i.name}</option>`).join('');
+  sel.value = state.selectedInstrument;
+  sel.addEventListener('change', () => {
+    selectInstrument(sel.value);
+    sel.blur(); // フォーカスが残ると PC キーで弾けなくなる
   });
 }
 
@@ -114,19 +100,17 @@ export function selectInstrument(instId: string, silent = false): void {
   const inst = INSTRUMENTS.find(i => i.id === instId);
   if (!inst) return;
   state.selectedInstrument = instId;
-  $('currentInstDesc').textContent = `選択中: ${inst.name} — ${inst.desc}`;
+  $<HTMLSelectElement>('instrumentSelect').value = instId;
 
   const leadTrack = state.tracks.find(t => t.id === 'lead');
   if (leadTrack) {
     leadTrack.inst = instId;
     renderMixerTracks();
   }
-
-  renderInstrumentGrid();
   if (!silent) showToast(`音色を「${inst.name}」に切り替えました`);
 }
 
-export function renderPresetMotifs(): void {
+export function renderPresetMotifs(onPick: (id: string) => void): void {
   const grid = $('presetMotifGrid');
   grid.innerHTML = '';
   PRESET_MOTIFS.forEach(m => {
@@ -134,7 +118,7 @@ export function renderPresetMotifs(): void {
     btn.type = 'button';
     btn.className = 'preset-btn';
     btn.innerHTML = `<span>${m.name}</span><span class="num muted">${m.bpm} BPM</span>`;
-    btn.addEventListener('click', () => loadPresetMotif(m.id));
+    btn.addEventListener('click', () => onPick(m.id));
     grid.appendChild(btn);
   });
 }
@@ -233,7 +217,6 @@ export function playLiveNote(midi: number, velocity = 0.88): void {
 
   const handle = triggerSynthNote(ctx, state.compressorNode!, state.selectedInstrument, midi, ctx.currentTime, null, velocity);
   state.activeNotes.set(midi, handle);
-  $('activeNoteDisplay').textContent = midiToNoteName(midi);
   keyElOf(midi)?.classList.add('active');
 
   // 録音中なら開始位置（拍）を記録
@@ -252,7 +235,6 @@ export function releaseLiveNote(midi: number, forceImmediate = false): void {
   }
 
   keyElOf(midi)?.classList.remove('active');
-  if (state.activeNotes.size === 0) $('activeNoteDisplay').textContent = '---';
 
   // 録音中なら長さを確定してフレーズに追加
   const info = state.pendingRecNotes.get(midi);
@@ -289,8 +271,8 @@ export function highlightTimelineBar(activeBar: number): void {
 }
 
 export function setPlayButton(playing: boolean): void {
-  $('playLoopIcon').textContent = playing ? '❚❚' : '▶';
-  $('playLoopText').textContent = playing ? '再生中' : 'ループ再生';
+  $('playLoopIcon').textContent = playing ? '■' : '▶';
+  $('playLoopText').textContent = playing ? '停止' : '再生';
 }
 
 // -----------------------------------------------------------------------------
@@ -330,6 +312,7 @@ export function renderMixerTracks(): void {
       const tr = trackOf(sel.dataset.trackInst);
       if (!tr) return;
       tr.inst = sel.value;
+      sel.blur();
       if (tr.id === 'lead') selectInstrument(tr.inst, true);
     });
   });
@@ -390,8 +373,6 @@ export function drawPhraseRoll(): void {
   }
   ctx.globalAlpha = 1;
 
-  $('phraseNoteCount').textContent = String(state.phraseNotes.length);
-
   if (state.phraseNotes.length === 0) {
     ctx.fillStyle = cssVar('--label-tertiary');
     ctx.font = '12px -apple-system, "Hiragino Sans", sans-serif';
@@ -417,42 +398,4 @@ export function drawPhraseRoll(): void {
     ctx.roundRect(x + 1, y, noteW, 8, 4);
     ctx.fill();
   });
-}
-
-export function startVisualizerLoop(): void {
-  const canvas = $<HTMLCanvasElement>('visualizerCanvas');
-  const ctx = canvas.getContext('2d')!;
-  const dpr = window.devicePixelRatio || 1;
-  const fit = (): void => {
-    canvas.width = canvas.clientWidth * dpr;
-    canvas.height = canvas.clientHeight * dpr;
-  };
-  fit();
-  window.addEventListener('resize', fit);
-
-  const bars = 24;
-  const render = (): void => {
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    const slot = w / bars;
-    const barW = Math.max(1, slot - 2 * dpr);
-
-    if (state.analyser) {
-      const data = new Uint8Array(state.analyser.frequencyBinCount);
-      state.analyser.getByteFrequencyData(data);
-      for (let i = 0; i < bars; i++) {
-        const barH = Math.max(3 * dpr, (data[i] / 255) * (h - 4 * dpr));
-        ctx.fillStyle = cssVar('--blue');
-        ctx.beginPath();
-        ctx.roundRect(i * slot + dpr, h - barH, barW, barH, barW / 2);
-        ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = cssVar('--fill');
-      for (let i = 0; i < bars; i++) ctx.fillRect(i * slot + dpr, h - 3 * dpr, barW, 2 * dpr);
-    }
-    requestAnimationFrame(render);
-  };
-  render();
 }

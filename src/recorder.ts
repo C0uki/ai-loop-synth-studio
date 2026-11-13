@@ -1,10 +1,9 @@
-import { ensureAudioContext, triggerSynthNote } from './audio';
-import { INSTRUMENTS } from './data';
+import { ensureAudioContext } from './audio';
 import { stopLoopPlayback } from './player';
 import { getSecondsPerBeat, state } from './state';
-import { $, drawPhraseRoll, loadPresetMotif, regenerate, showToast } from './ui';
+import { $, drawPhraseRoll, regenerate, showToast } from './ui';
 
-const IDLE_TEXT = '待機中: 録音ボタンを押すと4カウント後に開始します';
+const IDLE_TEXT = '押すと、4拍のカウントのあとに録音が始まります';
 
 const setDots = (activeIdx: number, color: 'amber' | 'red' | null): void => {
   document.querySelectorAll<HTMLElement>('#beatDots span').forEach((d, idx) => {
@@ -28,7 +27,7 @@ export function startPhraseRecording(): void {
   drawPhraseRoll();
 
   $('recordPhraseBtn').classList.add('recording');
-  $('recBtnLabel').textContent = '録音停止';
+  $('recBtnLabel').textContent = '録音を止める';
   const statusText = $('recStatusText');
 
   const secPerBeat = getSecondsPerBeat();
@@ -51,12 +50,12 @@ export function startPhraseRecording(): void {
     setDots(step % 4, step < 4 ? 'amber' : 'red');
 
     if (step < 4) {
-      statusText.textContent = `カウントイン: ${4 - step}… 鍵盤を弾く準備をしてください`;
+      statusText.textContent = `${4 - step}… 準備してください`;
     } else if (step === 4) {
       state.isCountingIn = false;
       state.isRecording = true;
       state.recStartTime = ctx.currentTime;
-      statusText.textContent = '録音中: 2小節（8拍）のメロディを演奏してください';
+      statusText.textContent = '録音中: 2小節（8拍）のメロディを弾いてください';
     } else if (step >= 12) {
       stopPhraseRecording();
       return;
@@ -82,8 +81,8 @@ export function stopPhraseRecording(): void {
   });
   state.pendingRecNotes.clear();
 
-  // 16分音符クオンタイズ
-  if ($<HTMLInputElement>('quantizeCheck').checked && state.phraseNotes.length > 0) {
+  // 16分音符にそろえる
+  if (state.phraseNotes.length > 0) {
     state.phraseNotes = state.phraseNotes.map(n => ({
       ...n,
       start: Math.min(7.75, Math.max(0, Math.round(n.start * 4) / 4)),
@@ -92,36 +91,16 @@ export function stopPhraseRecording(): void {
   }
 
   $('recordPhraseBtn').classList.remove('recording');
-  $('recBtnLabel').textContent = 'フレーズ録音 (2小節)';
+  $('recBtnLabel').textContent = '自分で録音（2小節）';
   setDots(-1, null);
 
   if (wasRecording && state.phraseNotes.length > 0) {
-    $('recStatusText').textContent = `録音完了 (${state.phraseNotes.length}音) — 自動アレンジを更新しました`;
+    $('recStatusText').textContent = `録音できました（${state.phraseNotes.length}音）。曲を作り直しました`;
     regenerate();
-    showToast('フレーズを録音し、約1分のループ曲を自動生成しました');
+    showToast('録音したフレーズで曲を作りました。▶ 再生で聴けます');
   } else {
     $('recStatusText').textContent = IDLE_TEXT;
   }
 
   drawPhraseRoll();
-}
-
-export function previewSeedPhrase(): void {
-  ensureAudioContext();
-  if (state.phraseNotes.length === 0) loadPresetMotif('pop_dream', true);
-
-  const ctx = state.audioCtx!;
-  const secPerBeat = getSecondsPerBeat();
-  const now = ctx.currentTime;
-  state.phraseNotes.forEach(n => {
-    triggerSynthNote(ctx, state.compressorNode!, state.selectedInstrument, n.midi, now + n.start * secPerBeat, n.dur * secPerBeat, n.vel);
-  });
-  const inst = INSTRUMENTS.find(i => i.id === state.selectedInstrument);
-  showToast(`「${inst?.name ?? ''}」で元フレーズを試聴中`);
-}
-
-export function clearPhrase(): void {
-  state.phraseNotes = [];
-  drawPhraseRoll();
-  $('recStatusText').textContent = 'フレーズをクリアしました。録音するか、サンプルを選んでください';
 }
