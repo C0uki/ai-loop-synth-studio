@@ -11,7 +11,7 @@ export function $<T extends HTMLElement = HTMLElement>(id: string): T {
   return el as T;
 }
 
-const cssVar = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+export const cssVar = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // -----------------------------------------------------------------------------
 // トースト
@@ -280,6 +280,7 @@ export function highlightTimelineBar(activeBar: number): void {
 export function setPlayButton(playing: boolean): void {
   $('playLoopIcon').textContent = playing ? '■' : '▶';
   $('playLoopText').textContent = playing ? '停止' : '再生';
+  $('editorPlayBtn').textContent = playing ? '■ 停止' : '▶ 再生';
 }
 
 // -----------------------------------------------------------------------------

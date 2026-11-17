@@ -1,5 +1,6 @@
 import './style.css';
 import { PC_KEY_MAP, $, drawPhraseRoll, loadPresetMotif, playLiveNote, regenerate, releaseLiveNote, renderInstrumentSelect, renderMixerTracks, renderPianoKeyboard, renderPresetMotifs, renderStyleSelect, renderTimelineBars, setBpm, setStyle, updateTimeDisplay } from './ui';
+import { initEditor } from './editor';
 import { exportLoopToWav, startLoopPlayback, stopLoopPlayback } from './player';
 import { startPhraseRecording } from './recorder';
 import { STYLES } from './data';
@@ -105,10 +106,10 @@ bpmSlider.addEventListener('input', () => {
 });
 
 // 再生・停止・WAV
-$('playLoopBtn').addEventListener('click', () => {
-  if (state.isPlayingLoop) stopLoopPlayback(true);
-  else startLoopPlayback(state.currentBar);
-});
+const togglePlay = (): void => (state.isPlayingLoop ? stopLoopPlayback(true) : startLoopPlayback(state.currentBar));
+$('playLoopBtn').addEventListener('click', togglePlay);
+$('editorPlayBtn').addEventListener('click', togglePlay);
+initEditor();
 $('exportWavBtn').addEventListener('click', exportLoopToWav);
 
 // canvas の再描画（サイズ変更・ライト/ダーク切替）

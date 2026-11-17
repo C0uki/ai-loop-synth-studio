@@ -46,6 +46,19 @@
     <div id="mixerTracksContainer" class="mixer"></div>
   </section>
 
+  <!-- 打ち込み -->
+  <section id="editorPanel" class="card popover" hidden>
+    <div class="popover-head">
+      <h2>打ち込み</h2><span class="muted caption">クリックで音を置く（右へドラッグで長く）／ 音をクリックで消す</span>
+      <div class="editor-actions">
+        <button id="editorPlayBtn" type="button" class="btn primary">▶ 再生</button>
+        <button id="editorClearBtn" type="button" class="btn">全消去</button>
+        <button id="closeEditorBtn" type="button" class="btn ghost">閉じる</button>
+      </div>
+    </div>
+    <canvas id="editorCanvas" class="editor-canvas" aria-label="フレーズの打ち込み（ピアノロール）"></canvas>
+  </section>
+
   <main class="page">
     <div class="top-row">
       <!-- ① フレーズ -->
@@ -58,6 +71,7 @@
 
         <div class="rec-row">
           <button id="recordPhraseBtn" type="button" class="btn rec"><span id="recIndicator" class="rec-dot"></span><span id="recBtnLabel">自分で録音（2小節）</span></button>
+          <button id="editPhraseBtn" type="button" class="btn" title="ピアノロールで音符を置いてフレーズを作る">打ち込み</button>
           <div class="status">
             <span id="recStatusText">押すと、4拍のカウントのあとに録音が始まります</span>
             <div id="beatDots" class="beat-dots" aria-hidden="true"><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span><span class="beat-dot"></span></div>
