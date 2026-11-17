@@ -1,5 +1,6 @@
 import { midiToNoteName } from './audio';
 import { state } from './state';
+import type { Note } from './types';
 import { $, cssVar, drawPhraseRoll, playLiveNote, regenerate, releaseLiveNote, showToast } from './ui';
 
 const STEP = 0.25; // 16分音符
@@ -9,7 +10,11 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 
 let lo = 60;
 let hi = 83;
-let drag: { midi: number; col: number; end: number } | null = null;
+/** new = 置いている途中の新しい音 / move = 持ち上げて動かしている既存の音（元の音は phraseNotes から外してある） */
+type Drag =
+  | { kind: 'new'; midi: number; col: number; end: number }
+  | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean };
+let drag: Drag | null = null;
 
 const panel = (): HTMLElement => $('editorPanel');
 const canvas = (): HTMLCanvasElement => $<HTMLCanvasElement>('editorCanvas');
@@ -74,7 +79,8 @@ function draw(): void {
     ctx.globalAlpha = 1;
   };
   state.phraseNotes.forEach(n => box(n.midi, n.start, n.dur, 1));
-  if (drag) box(drag.midi, drag.col * STEP, (drag.end - drag.col + 1) * STEP, 0.6);
+  if (drag?.kind === 'new') box(drag.midi, drag.col * STEP, (drag.end - drag.col + 1) * STEP, 0.6);
+  if (drag?.kind === 'move') box(drag.midi, drag.start, drag.note.dur, 0.85);
 }
 
 /** 画面上の位置 → { 音, 列 }（音名欄の上なら null）。 */
@@ -136,11 +142,12 @@ export function initEditor(): void {
     const t0 = p.col * STEP;
     const hit = state.phraseNotes.findIndex(n => n.midi === p.midi && n.start < t0 + STEP - 1e-6 && n.start + n.dur > t0 + 1e-6);
     if (hit >= 0) {
-      state.phraseNotes.splice(hit, 1); // 音をクリック = 消す
-      commit();
-      return;
+      // 既存の音: 持ち上げる（動かせば移動、動かさずに離せば消す）
+      const [note] = state.phraseNotes.splice(hit, 1);
+      drag = { kind: 'move', note, grab: p.col - Math.round(note.start / STEP), midi: note.midi, start: note.start, moved: false };
+    } else {
+      drag = { kind: 'new', midi: p.midi, col: p.col, end: p.col };
     }
-    drag = { ...p, end: p.col };
     c.setPointerCapture(e.pointerId);
     audition(p.midi);
     draw();
@@ -148,17 +155,30 @@ export function initEditor(): void {
   c.addEventListener('pointermove', e => {
     const p = cellAt(e);
     if (!drag || !p) return;
-    drag.end = Math.max(drag.col, p.col);
+    if (drag.kind === 'new') {
+      drag.end = Math.max(drag.col, p.col);
+    } else {
+      const start = Math.min(8 - drag.note.dur, Math.max(0, (p.col - drag.grab) * STEP));
+      if (p.midi !== drag.midi) audition(p.midi);
+      if (p.midi !== drag.midi || start !== drag.start) drag.moved = true;
+      drag.midi = p.midi;
+      drag.start = start;
+    }
     draw();
   });
   c.addEventListener('pointerup', () => {
     if (!drag) return;
-    const { midi, col, end } = drag;
+    const d = drag;
     drag = null;
-    state.phraseNotes.push({ midi, start: col * STEP, dur: (end - col + 1) * STEP, vel: 0.85 });
+    if (d.kind === 'new') {
+      state.phraseNotes.push({ midi: d.midi, start: d.col * STEP, dur: (d.end - d.col + 1) * STEP, vel: 0.85 });
+    } else if (d.moved) {
+      state.phraseNotes.push({ ...d.note, midi: d.midi, start: d.start });
+    } // 動かさずに離した音は、そのまま消える
     commit();
   });
   c.addEventListener('pointercancel', () => {
+    if (drag?.kind === 'move') state.phraseNotes.push(drag.note); // 元に戻す
     drag = null;
     draw();
   });
