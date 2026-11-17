@@ -1,3 +1,4 @@
+import { STYLES } from './data';
 import type { Arrangement, BarData, Note, Scale, Section, StyleId, TrackId } from './types';
 
 export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -68,13 +69,6 @@ export function buildDiatonicChord(scaleRoot: number, scaleType: Scale['type'], 
   ];
 }
 
-const STYLE_INSTRUMENTS: Record<StyleId, Record<'chords' | 'bass' | 'arp', string>> = {
-  pop: { chords: 'epiano', bass: 'synthbass', arp: 'pluck' },
-  lofi: { chords: 'epiano', bass: 'synthbass', arp: 'marimba' },
-  synthwave: { chords: 'warmpad', bass: 'synthbass', arp: 'pluck' },
-  fusion: { chords: 'organ', bass: 'synthbass', arp: 'epiano' }
-};
-
 export interface ArrangeResult {
   arrangement: Arrangement;
   scale: Scale;
@@ -91,14 +85,8 @@ export interface ArrangeResult {
 export function generateArrangement(seed: Note[], style: StyleId, bpm: number, leadInst: string): ArrangeResult {
   const scale = detectScaleFromNotes(seed);
 
-  // スタイル別のコード進行（度数）
-  const progressionsByStyle: Record<StyleId, number[]> = {
-    pop: scale.type === 'major' ? [3, 4, 2, 5] : [5, 3, 0, 4],
-    lofi: scale.type === 'major' ? [1, 4, 0, 5] : [3, 6, 2, 5],
-    synthwave: scale.type === 'major' ? [5, 3, 0, 4] : [0, 5, 2, 6],
-    fusion: scale.type === 'major' ? [3, 2, 1, 4] : [1, 4, 0, 3]
-  };
-  const progDegrees = progressionsByStyle[style] || [3, 4, 2, 5];
+  const spec = STYLES[style];
+  const progDegrees = scale.type === 'major' ? spec.prog.major : spec.prog.minor;
   const intervals = scale.type === 'major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
   const chordNames = progDegrees.map(deg => {
     const chordRoot = (scale.root + intervals[deg % 7]) % 12;
@@ -106,7 +94,9 @@ export function generateArrangement(seed: Note[], style: StyleId, bpm: number, l
     return `${NOTE_NAMES[chordRoot]}${isMinor ? 'm' : ''}`;
   });
 
-  const swingAmount = style === 'lofi' ? 0.08 : style === 'fusion' ? 0.05 : 0;
+  const swingAmount = spec.swing;
+  /** 裏拍（x.5）だけ後ろへずらす */
+  const swung = (beat: number): number => beat + (beat % 1 === 0.5 ? swingAmount : 0);
   const bars: BarData[] = [];
 
   for (let bar = 0; bar < TOTAL_BARS; bar++) {
@@ -115,8 +105,6 @@ export function generateArrangement(seed: Note[], style: StyleId, bpm: number, l
 
     const degree = progDegrees[bar % 4];
     const chordNotes = buildDiatonicChord(scale.root, scale.type, degree, 3);
-    const bassRoot = chordNotes[0] - 12;
-    const bassFifth = chordNotes[2] - 12;
 
     // 1. リード: 種フレーズを1小節ずつ使い、セクションごとに変化させる
     const seedHalfOffset = (bar % 2) * 4; // 偶数小節は0〜4拍、奇数小節は4〜8拍
@@ -146,47 +134,22 @@ export function generateArrangement(seed: Note[], style: StyleId, bpm: number, l
     }
 
     // 2. コード
-    if (style === 'lofi') {
-      chordNotes.forEach(cMidi => {
-        barData.chords.push({ midi: cMidi, beat: 0, dur: 3.75, vel: section === 'Chorus' ? 0.75 : 0.58 });
-      });
-    } else if (style === 'pop' || style === 'fusion') {
-      const hitBeats = section === 'Chorus' ? [0, 1.5, 2.5, 3.5] : [0, 2];
-      const hitDur = section === 'Chorus' ? 0.85 : 1.8;
-      hitBeats.forEach(b => {
-        chordNotes.slice(0, 3).forEach(cMidi => {
-          barData.chords.push({ midi: cMidi, beat: b, dur: hitDur, vel: section === 'Chorus' ? 0.72 : 0.55 });
-        });
-      });
-    } else {
-      chordNotes.slice(0, 3).forEach(cMidi => {
-        barData.chords.push({ midi: cMidi, beat: 0, dur: 3.9, vel: 0.62 });
-      });
-    }
+    const hitSet = section === 'Chorus' ? spec.chords.chorus : spec.chords.verse;
+    hitSet.beats.forEach(b => {
+      chordNotes.slice(0, spec.chords.n).forEach(m => barData.chords.push({ midi: m, beat: b, dur: hitSet.dur, vel: hitSet.vel }));
+    });
 
     // 3. ベース（Verse から入り、Outro 手前まで）
     if (bar >= 4 && bar < 30) {
-      if (style === 'synthwave') {
-        for (let step = 0; step < 8; step++) {
-          const noteMidi = step % 4 === 3 ? bassRoot + 12 : bassRoot;
-          barData.bass.push({ midi: noteMidi, beat: step * 0.5, dur: 0.42, vel: 0.85 });
-        }
-      } else if (style === 'lofi') {
-        barData.bass.push({ midi: bassRoot, beat: 0, dur: 1.75, vel: 0.82 });
-        barData.bass.push({ midi: bassFifth, beat: 2.0 + swingAmount, dur: 1.25, vel: 0.72 });
-        barData.bass.push({ midi: bassRoot + 12, beat: 3.5 + swingAmount, dur: 0.45, vel: 0.68 });
-      } else {
-        barData.bass.push({ midi: bassRoot, beat: 0, dur: 0.9, vel: 0.88 });
-        barData.bass.push({ midi: bassRoot, beat: 1.5, dur: 0.45, vel: 0.75 });
-        barData.bass.push({ midi: bassFifth, beat: 2.0, dur: 0.9, vel: 0.82 });
-        barData.bass.push({ midi: bassRoot + 12, beat: 3.0, dur: 0.85, vel: 0.8 });
-      }
+      spec.bass.forEach(([beat, tone, oct, dur, vel]) => {
+        barData.bass.push({ midi: chordNotes[tone] - 12 + oct * 12, beat: swung(beat), dur, vel });
+      });
     }
 
     // 4. アルペジオ（Build / Chorus / Solo と、Intro 終盤の2小節）
     if ((bar >= 12 && bar < 28) || (bar >= 2 && bar < 4)) {
       const arpNotes = chordNotes.map(m => m + 12);
-      const stepDur = section === 'Chorus' ? 0.25 : 0.5;
+      const stepDur = section === 'Chorus' ? spec.arp[1] : spec.arp[0];
       const totalSteps = Math.floor(4 / stepDur);
       for (let s = 0; s < totalSteps; s++) {
         barData.arp.push({
@@ -200,26 +163,20 @@ export function generateArrangement(seed: Note[], style: StyleId, bpm: number, l
 
     // 5. ドラム
     if (bar >= 4 && bar < 30) {
-      if (style === 'pop' || style === 'synthwave') {
-        [0, 1, 2, 3].forEach(b => barData.drums.push({ type: 'kick', beat: b, vel: 0.92 }));
-        [1, 3].forEach(b => barData.drums.push({ type: style === 'pop' ? 'clap' : 'snare', beat: b, vel: 0.85 }));
-      } else {
-        barData.drums.push({ type: 'kick', beat: 0, vel: 0.9 });
-        barData.drums.push({ type: 'kick', beat: 2.5 + swingAmount, vel: 0.82 });
-        barData.drums.push({ type: 'snare', beat: 1, vel: 0.8 });
-        barData.drums.push({ type: 'snare', beat: 3, vel: 0.84 });
-      }
+      const d = spec.drums;
+      d.kick.forEach(b => barData.drums.push({ type: 'kick', beat: swung(b), vel: b % 1 === 0 ? 0.9 : 0.8 }));
+      d.snare.forEach(b => barData.drums.push({ type: d.snareType ?? 'snare', beat: b, vel: 0.84 }));
 
-      const hatSteps = section === 'Chorus' ? 16 : 8;
+      const hatSteps = section === 'Chorus' ? d.hat[1] : d.hat[0];
       const hatInterval = 4 / hatSteps;
       for (let h = 0; h < hatSteps; h++) {
         const beat = h * hatInterval + (h % 2 === 1 ? swingAmount * 0.5 : 0);
-        const isOpen = h === hatSteps - 2 && bar % 2 === 1;
+        const isOpen = d.openOff ? h % (hatSteps / 4) === hatSteps / 8 : h === hatSteps - 2 && bar % 2 === 1;
         barData.drums.push({ type: isOpen ? 'openhat' : 'hat', beat, vel: h % 2 === 0 ? 0.72 : 0.45 });
       }
 
       // 4小節ごとのフィル
-      if (bar % 4 === 3) {
+      if (!d.noFill && bar % 4 === 3) {
         barData.drums.push({ type: 'snare', beat: 3.5, vel: 0.75 });
         barData.drums.push({ type: 'snare', beat: 3.75, vel: 0.88 });
       }
@@ -236,6 +193,6 @@ export function generateArrangement(seed: Note[], style: StyleId, bpm: number, l
     arrangement: { bpm, style, bars },
     scale,
     chordNames,
-    trackInsts: { lead: leadInst, ...STYLE_INSTRUMENTS[style] }
+    trackInsts: { lead: leadInst, ...spec.insts }
   };
 }

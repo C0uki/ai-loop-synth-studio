@@ -1,7 +1,8 @@
 import './style.css';
-import { PC_KEY_MAP, $, drawPhraseRoll, loadPresetMotif, playLiveNote, regenerate, releaseLiveNote, renderInstrumentSelect, renderMixerTracks, renderPianoKeyboard, renderPresetMotifs, renderTimelineBars, setStyleSegment, updateTimeDisplay } from './ui';
+import { PC_KEY_MAP, $, drawPhraseRoll, loadPresetMotif, playLiveNote, regenerate, releaseLiveNote, renderInstrumentSelect, renderMixerTracks, renderPianoKeyboard, renderPresetMotifs, renderStyleSelect, renderTimelineBars, setBpm, setStyle, updateTimeDisplay } from './ui';
 import { exportLoopToWav, startLoopPlayback, stopLoopPlayback } from './player';
 import { startPhraseRecording } from './recorder';
+import { STYLES } from './data';
 import { state } from './state';
 import type { StyleId } from './types';
 
@@ -43,6 +44,7 @@ window.addEventListener('keyup', e => {
 
 // ---- 初期化 ----
 renderInstrumentSelect();
+renderStyleSelect();
 renderPianoKeyboard();
 renderPresetMotifs(id => {
   loadPresetMotif(id);
@@ -85,13 +87,14 @@ sustainBtn.addEventListener('click', () => {
 $('recordPhraseBtn').addEventListener('click', startPhraseRecording);
 
 // ジャンル・テンポ
-document.querySelectorAll<HTMLButtonElement>('#styleSegment [data-style]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    state.style = btn.dataset.style as StyleId;
-    setStyleSegment(state.style);
-    regenerate();
-    if (!state.isPlayingLoop) startLoopPlayback(0);
-  });
+const styleSelect = $<HTMLSelectElement>('styleSelect');
+styleSelect.addEventListener('change', () => {
+  const style = styleSelect.value as StyleId;
+  setStyle(style);
+  setBpm(STYLES[style].bpm); // ジャンルごとの標準テンポに合わせる
+  styleSelect.blur(); // 鍵盤の PC キーをすぐ使えるように
+  regenerate();
+  if (!state.isPlayingLoop) startLoopPlayback(0);
 });
 
 const bpmSlider = $<HTMLInputElement>('bpmSlider');

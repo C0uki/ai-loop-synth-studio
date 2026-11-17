@@ -1,6 +1,6 @@
 import { generateArrangement, getSectionForBar } from './arranger';
 import { ensureAudioContext, midiToNoteName, triggerSynthNote } from './audio';
-import { INSTRUMENTS, PRESET_MOTIFS } from './data';
+import { INSTRUMENTS, PRESET_MOTIFS, STYLES } from './data';
 import { formatTimeMMSS, getSecondsPerBeat, getTotalLoopSeconds, state } from './state';
 import type { StyleId } from './types';
 
@@ -55,10 +55,21 @@ export function updateTimeDisplay(): void {
   }
 }
 
-export function setStyleSegment(style: StyleId): void {
-  document.querySelectorAll<HTMLButtonElement>('#styleSegment [data-style]').forEach(b => {
-    b.setAttribute('aria-pressed', String(b.dataset.style === style));
-  });
+export function renderStyleSelect(): void {
+  const sel = $<HTMLSelectElement>('styleSelect');
+  sel.innerHTML = (Object.keys(STYLES) as StyleId[]).map(id => `<option value="${id}">${STYLES[id].name}</option>`).join('');
+  sel.value = state.style;
+}
+
+export function setStyle(style: StyleId): void {
+  state.style = style;
+  $<HTMLSelectElement>('styleSelect').value = style;
+}
+
+export function setBpm(bpm: number): void {
+  state.bpm = bpm;
+  $<HTMLInputElement>('bpmSlider').value = String(bpm);
+  $('bpmValueLabel').textContent = String(bpm);
 }
 
 export function loadPresetMotif(motifId: string, silent = false): void {
@@ -66,12 +77,8 @@ export function loadPresetMotif(motifId: string, silent = false): void {
   if (!motif) return;
 
   state.phraseNotes = motif.notes.map(n => ({ ...n }));
-  state.style = motif.style;
-  state.bpm = motif.bpm;
-
-  setStyleSegment(motif.style);
-  $<HTMLInputElement>('bpmSlider').value = String(motif.bpm);
-  $('bpmValueLabel').textContent = String(motif.bpm);
+  setStyle(motif.style);
+  setBpm(motif.bpm);
 
   selectInstrument(motif.inst, true);
   drawPhraseRoll();

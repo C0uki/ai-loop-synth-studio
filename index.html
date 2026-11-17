@@ -86,15 +86,12 @@
         </div>
 
         <div class="song-controls">
-          <div id="styleSegment" class="segment" role="group" aria-label="ジャンル">
-            <button type="button" data-style="pop" aria-pressed="true">ポップ</button>
-            <button type="button" data-style="lofi" aria-pressed="false">Lo-Fi</button>
-            <button type="button" data-style="synthwave" aria-pressed="false">シンセウェーブ</button>
-            <button type="button" data-style="fusion" aria-pressed="false">フュージョン</button>
-          </div>
+          <label class="field genre"><span class="muted">ジャンル</span>
+            <select id="styleSelect" class="select" aria-label="ジャンル"></select>
+          </label>
           <div class="tempo">
             <span class="muted">テンポ</span>
-            <input id="bpmSlider" type="range" min="96" max="136" step="2" value="120" aria-label="テンポ (BPM)" />
+            <input id="bpmSlider" type="range" min="60" max="180" step="2" value="120" aria-label="テンポ (BPM)" />
             <span class="num"><span id="bpmValueLabel">120</span> BPM</span>
           </div>
         </div>
