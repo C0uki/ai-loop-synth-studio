@@ -12,11 +12,11 @@ let lo = 60;
 let hi = 83;
 /**
  * new = 置いている途中の新しい音 / move = 持ち上げて動かしている既存の音 / resize = 右端を引いて長さを変えている既存の音。
- * move と resize の元の音は、操作中だけ phraseNotes から外してある。
+ * move と resize の元の音は、操作中だけ phraseNotes から外してある。ただし copy（Alt / Ctrl を押して動かす複製）は元の音を残す。
  */
 type Drag =
   | { kind: 'new'; midi: number; col: number; end: number }
-  | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean }
+  | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean; copy: boolean }
   | { kind: 'resize'; note: Note; dur: number };
 let drag: Drag | null = null;
 
@@ -162,10 +162,11 @@ export function initEditor(): void {
     const hit = noteAt(e);
     if (hit) {
       // 既存の音: 右端なら長さを変える。それ以外は持ち上げる（動かせば移動、動かさずに離せば消す）
-      const [note] = state.phraseNotes.splice(hit.index, 1);
+      const copy = !hit.onEdge && (e.altKey || e.ctrlKey); // Alt / Ctrl を押しながら = 複製
+      const note = copy ? { ...state.phraseNotes[hit.index] } : state.phraseNotes.splice(hit.index, 1)[0];
       drag = hit.onEdge
         ? { kind: 'resize', note, dur: note.dur }
-        : { kind: 'move', note, grab: p.col - Math.round(note.start / STEP), midi: note.midi, start: note.start, moved: false };
+        : { kind: 'move', note, grab: p.col - Math.round(note.start / STEP), midi: note.midi, start: note.start, moved: false, copy };
     } else {
       drag = { kind: 'new', midi: p.midi, col: p.col, end: p.col };
     }
@@ -204,11 +205,13 @@ export function initEditor(): void {
       state.phraseNotes.push({ ...d.note, dur: d.dur });
     } else if (d.moved) {
       state.phraseNotes.push({ ...d.note, midi: d.midi, start: d.start });
+    } else if (d.copy) {
+      return draw(); // 動かさずに離した複製は、何もしない
     } // 動かさずに離した音は、そのまま消える
     commit();
   });
   c.addEventListener('pointercancel', () => {
-    if (drag && drag.kind !== 'new') state.phraseNotes.push(drag.note); // 元に戻す
+    if (drag && drag.kind !== 'new' && !(drag.kind === 'move' && drag.copy)) state.phraseNotes.push(drag.note); // 元に戻す
     drag = null;
     draw();
   });
