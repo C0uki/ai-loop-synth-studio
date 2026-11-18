@@ -19,6 +19,8 @@ type Drag =
   | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean; copy: boolean }
   | { kind: 'resize'; note: Note; dur: number };
 let drag: Drag | null = null;
+let hover: PointerEvent | null = null; // 直近のカーソル位置（コピー元と貼り付け先に使う）
+let clip: Note | null = null; // コピーした音（1つだけ）
 
 const panel = (): HTMLElement => $('editorPanel');
 const canvas = (): HTMLCanvasElement => $<HTMLCanvasElement>('editorCanvas');
@@ -152,7 +154,27 @@ export function initEditor(): void {
     state.phraseNotes = [];
     commit();
   });
-  window.addEventListener('keydown', e => e.key === 'Escape' && close());
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') return close();
+    if (panel().hidden || drag || !hover || !(e.ctrlKey || e.metaKey)) return;
+    const key = e.key.toLowerCase();
+    if (key === 'c') {
+      // カーソルの下の音をコピー
+      const hit = noteAt(hover);
+      if (!hit) return;
+      clip = { ...state.phraseNotes[hit.index] };
+      e.preventDefault();
+      $('recStatusText').textContent = 'コピーしました。貼り付けたい場所にカーソルを置いて Ctrl+V';
+    } else if (key === 'v' && clip) {
+      // カーソルの位置（音の高さと拍）に貼り付け
+      const p = cellAt(hover);
+      if (!p) return;
+      e.preventDefault();
+      state.phraseNotes.push({ ...clip, midi: p.midi, start: Math.min(8 - clip.dur, p.col * STEP) });
+      audition(p.midi);
+      commit();
+    }
+  });
   window.addEventListener('resize', () => !panel().hidden && draw());
 
   const c = canvas();
@@ -174,7 +196,9 @@ export function initEditor(): void {
     audition(p.midi);
     draw();
   });
+  c.addEventListener('pointerleave', () => (hover = null));
   c.addEventListener('pointermove', e => {
+    hover = e;
     const p = cellAt(e);
     if (!drag) {
       const hit = noteAt(e);
