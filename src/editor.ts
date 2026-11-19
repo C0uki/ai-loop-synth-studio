@@ -218,6 +218,25 @@ export function initEditor(): void {
       selected.clear();
       return commit();
     }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // 選択中の音（なければカーソルの下の音）の高さを、↑↓で半音ずつ、Shift で1オクターブ動かす
+      const tag = document.activeElement?.tagName;
+      if (panel().hidden || drag || tag === 'SELECT' || tag === 'INPUT') return;
+      const targets = state.phraseNotes.filter(n => selected.has(n));
+      const hit = hover && noteAt(hover);
+      if (!targets.length && hit) {
+        targets.push(state.phraseNotes[hit.index]);
+        selected.add(targets[0]); // 音がカーソルから離れても、続けて動かせるように選択しておく
+      }
+      if (!targets.length) return;
+      e.preventDefault();
+      const step = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1);
+      const dp = Math.max(lo - Math.min(...targets.map(n => n.midi)), Math.min(step, hi - Math.max(...targets.map(n => n.midi)))); // 画面の範囲内に収める
+      if (!dp) return;
+      targets.forEach(n => (n.midi += dp));
+      audition(targets[0].midi);
+      return commit();
+    }
     if (panel().hidden || drag || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     if (key === 'z' || key === 'y') {
