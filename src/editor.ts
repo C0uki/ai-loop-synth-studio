@@ -179,6 +179,18 @@ export function initEditor(): void {
   });
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') return close();
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      // 選択中の音を消す。選んでいなければ、カーソルの下の1音
+      if (panel().hidden || drag) return;
+      const victims = state.phraseNotes.filter(n => selected.has(n));
+      const hit = hover && noteAt(hover);
+      if (!victims.length && hit) victims.push(state.phraseNotes[hit.index]);
+      if (!victims.length) return;
+      e.preventDefault();
+      state.phraseNotes = state.phraseNotes.filter(n => !victims.includes(n));
+      selected.clear();
+      return commit();
+    }
     if (panel().hidden || drag || !hover || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     if (key === 'c') {
