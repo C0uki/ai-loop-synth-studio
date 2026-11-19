@@ -17,10 +17,12 @@ let hi = 83;
 type Drag =
   | { kind: 'new'; midi: number; col: number; end: number }
   | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean; copy: boolean }
-  | { kind: 'resize'; note: Note; dur: number };
+  | { kind: 'resize'; note: Note; dur: number }
+  | { kind: 'select'; c0: number; m0: number; c1: number; m1: number }; // Shift+ドラッグで囲んでいる範囲（列, 音）
 let drag: Drag | null = null;
 let hover: PointerEvent | null = null; // 直近のカーソル位置（コピー元と貼り付け先に使う）
-let clip: Note | null = null; // コピーした音（1つだけ）
+let clip: Note[] = []; // コピーした音
+const selected = new Set<Note>(); // 選択中の音（Shift で選ぶ）
 
 const panel = (): HTMLElement => $('editorPanel');
 const canvas = (): HTMLCanvasElement => $<HTMLCanvasElement>('editorCanvas');
@@ -84,7 +86,26 @@ function draw(): void {
     ctx.fill();
     ctx.globalAlpha = 1;
   };
-  state.phraseNotes.forEach(n => box(n.midi, n.start, n.dur, 1));
+  state.phraseNotes.forEach(n => {
+    box(n.midi, n.start, n.dur, 1);
+    if (!selected.has(n)) return;
+    ctx.strokeStyle = cssVar('--orange');
+    ctx.lineWidth = 2;
+    ctx.strokeRect(GUTTER + (n.start / STEP) * colW, (hi - n.midi) * rowH + 1, Math.max(4, (n.dur / STEP) * colW - 1), rowH - 2);
+  });
+  if (drag?.kind === 'select') {
+    const x = GUTTER + Math.min(drag.c0, drag.c1) * colW;
+    const y = (hi - Math.max(drag.m0, drag.m1)) * rowH;
+    const w = (Math.abs(drag.c1 - drag.c0) + 1) * colW;
+    const h = (Math.abs(drag.m1 - drag.m0) + 1) * rowH;
+    ctx.fillStyle = cssVar('--blue');
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = cssVar('--blue');
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+  }
   if (drag?.kind === 'new') box(drag.midi, drag.col * STEP, (drag.end - drag.col + 1) * STEP, 0.6);
   if (drag?.kind === 'move') box(drag.midi, drag.start, drag.note.dur, 0.85);
   if (drag?.kind === 'resize') box(drag.note.midi, drag.note.start, drag.dur, 0.85);
@@ -138,6 +159,7 @@ function open(): void {
     showToast('録音中です。先に録音を止めてください');
     return;
   }
+  selected.clear();
   const midis = state.phraseNotes.map(n => n.midi);
   lo = Math.min(60, ...midis);
   hi = Math.max(83, ...midis);
@@ -152,6 +174,7 @@ export function initEditor(): void {
   $('closeEditorBtn').addEventListener('click', close);
   $('editorClearBtn').addEventListener('click', () => {
     state.phraseNotes = [];
+    selected.clear();
     commit();
   });
   window.addEventListener('keydown', e => {
@@ -159,19 +182,28 @@ export function initEditor(): void {
     if (panel().hidden || drag || !hover || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     if (key === 'c') {
-      // カーソルの下の音をコピー
+      // 選択中の音をコピー。選んでいなければ、カーソルの下の1音
       const hit = noteAt(hover);
-      if (!hit) return;
-      clip = { ...state.phraseNotes[hit.index] };
+      const src = state.phraseNotes.filter(n => selected.has(n));
+      if (!src.length && hit) src.push(state.phraseNotes[hit.index]);
+      if (!src.length) return;
+      clip = src.map(n => ({ ...n }));
       e.preventDefault();
-      $('recStatusText').textContent = 'コピーしました。貼り付けたい場所にカーソルを置いて Ctrl+V';
-    } else if (key === 'v' && clip) {
-      // カーソルの位置（音の高さと拍）に貼り付け
+      $('recStatusText').textContent = `${clip.length}音をコピーしました。貼り付けたい場所にカーソルを置いて Ctrl+V`;
+    } else if (key === 'v' && clip.length) {
+      // 一番前の音をカーソル位置（拍と音の高さ）に合わせて貼り付け。はみ出す分は内側へ寄せる
       const p = cellAt(hover);
       if (!p) return;
       e.preventDefault();
-      state.phraseNotes.push({ ...clip, midi: p.midi, start: Math.min(8 - clip.dur, p.col * STEP) });
-      audition(p.midi);
+      const t0 = Math.min(...clip.map(n => n.start));
+      const base = clip.find(n => n.start === t0)!;
+      const dt = Math.min(p.col * STEP - t0, 8 - Math.max(...clip.map(n => n.start + n.dur)));
+      const dp = Math.max(lo - Math.min(...clip.map(n => n.midi)), Math.min(p.midi - base.midi, hi - Math.max(...clip.map(n => n.midi))));
+      const pasted = clip.map(n => ({ ...n, midi: n.midi + dp, start: n.start + dt }));
+      state.phraseNotes.push(...pasted);
+      selected.clear();
+      pasted.forEach(n => selected.add(n)); // 貼った音をそのまま選択（続けて動かしたりコピーしたりできる）
+      audition(base.midi + dp);
       commit();
     }
   });
@@ -182,6 +214,18 @@ export function initEditor(): void {
     const p = cellAt(e);
     if (!p) return;
     const hit = noteAt(e);
+    if (e.shiftKey) {
+      // Shift: 音をクリックで選択を切り替え / 空いた所からドラッグで範囲選択
+      if (hit) {
+        const n = state.phraseNotes[hit.index];
+        if (!selected.delete(n)) selected.add(n);
+        return draw();
+      }
+      drag = { kind: 'select', c0: p.col, m0: p.midi, c1: p.col, m1: p.midi };
+      c.setPointerCapture(e.pointerId);
+      return draw();
+    }
+    selected.clear();
     if (hit) {
       // 既存の音: 右端なら長さを変える。それ以外は持ち上げる（動かせば移動、動かさずに離せば消す）
       const copy = !hit.onEdge && (e.altKey || e.ctrlKey); // Alt / Ctrl を押しながら = 複製
@@ -208,6 +252,9 @@ export function initEditor(): void {
     if (!p) return;
     if (drag.kind === 'new') {
       drag.end = Math.max(drag.col, p.col);
+    } else if (drag.kind === 'select') {
+      drag.c1 = p.col;
+      drag.m1 = p.midi;
     } else if (drag.kind === 'resize') {
       drag.dur = Math.min(8 - drag.note.start, Math.max(STEP, (p.col + 1) * STEP - drag.note.start));
     } else {
@@ -223,6 +270,16 @@ export function initEditor(): void {
     if (!drag) return;
     const d = drag;
     drag = null;
+    if (d.kind === 'select') {
+      // 囲んだ範囲に少しでもかかる音を、選択に加える
+      const [c0, c1] = [Math.min(d.c0, d.c1), Math.max(d.c0, d.c1)];
+      const [m0, m1] = [Math.min(d.m0, d.m1), Math.max(d.m0, d.m1)];
+      for (const n of state.phraseNotes) {
+        if (n.midi >= m0 && n.midi <= m1 && n.start < (c1 + 1) * STEP - 1e-6 && n.start + n.dur > c0 * STEP + 1e-6) selected.add(n);
+      }
+      $('recStatusText').textContent = `${selected.size}音を選択中。Ctrl+C でコピーできます`;
+      return draw();
+    }
     if (d.kind === 'new') {
       state.phraseNotes.push({ midi: d.midi, start: d.col * STEP, dur: (d.end - d.col + 1) * STEP, vel: 0.85 });
     } else if (d.kind === 'resize') {
@@ -235,7 +292,7 @@ export function initEditor(): void {
     commit();
   });
   c.addEventListener('pointercancel', () => {
-    if (drag && drag.kind !== 'new' && !(drag.kind === 'move' && drag.copy)) state.phraseNotes.push(drag.note); // 元に戻す
+    if (drag && (drag.kind === 'resize' || (drag.kind === 'move' && !drag.copy))) state.phraseNotes.push(drag.note); // 元に戻す
     drag = null;
     draw();
   });
