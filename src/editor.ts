@@ -136,8 +136,33 @@ function noteAt(e: PointerEvent): { index: number; onEdge: boolean } | null {
   return { index, onEdge: e.clientX - rect.left >= edgeX - zone };
 }
 
-/** 編集のたびに曲を作り直す（再生中ならそのまま変わる）。 */
+// 元に戻す用。last は「いまの状態」の写しで、編集のたびに1つ前の状態を undoStack へ積む
+const undoStack: Note[][] = [];
+const redoStack: Note[][] = [];
+let last: Note[] = [];
+const snap = (): Note[] => state.phraseNotes.map(n => ({ ...n }));
+
+/** 編集を確定する: 履歴に積んで、曲に反映する。 */
 function commit(): void {
+  undoStack.push(last);
+  redoStack.length = 0;
+  apply();
+  last = snap();
+}
+
+/** 元に戻す / やり直す（from から1つ取り出して、いまの状態を to へ積む）。 */
+function restore(from: Note[][], to: Note[][]): void {
+  const prev = from.pop();
+  if (!prev) return;
+  to.push(last);
+  state.phraseNotes = prev.map(n => ({ ...n }));
+  selected.clear();
+  apply();
+  last = snap();
+}
+
+/** 画面と曲を、いまの音の並びに合わせる（再生中ならそのまま変わる）。 */
+function apply(): void {
   state.phraseNotes.sort((a, b) => a.start - b.start);
   draw();
   drawPhraseRoll();
@@ -160,6 +185,8 @@ function open(): void {
     return;
   }
   selected.clear();
+  undoStack.length = redoStack.length = 0; // 録音やサンプル読み込みで音が変わっていることがあるので、履歴は開くたびに作り直す
+  last = snap();
   const midis = state.phraseNotes.map(n => n.midi);
   lo = Math.min(60, ...midis);
   hi = Math.max(83, ...midis);
@@ -191,8 +218,14 @@ export function initEditor(): void {
       selected.clear();
       return commit();
     }
-    if (panel().hidden || drag || !hover || !(e.ctrlKey || e.metaKey)) return;
+    if (panel().hidden || drag || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
+    if (key === 'z' || key === 'y') {
+      // Ctrl+Z で元に戻す、Ctrl+Shift+Z / Ctrl+Y でやり直す
+      e.preventDefault();
+      return key === 'y' || e.shiftKey ? restore(redoStack, undoStack) : restore(undoStack, redoStack);
+    }
+    if (!hover) return;
     if (key === 'c') {
       // 選択中の音をコピー。選んでいなければ、カーソルの下の1音
       const hit = noteAt(hover);
