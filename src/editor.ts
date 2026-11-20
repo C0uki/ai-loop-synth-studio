@@ -295,6 +295,18 @@ export function initEditor(): void {
       $('recStatusText').textContent = `音の強さ: ${Math.round(t[0].vel * 100)}%`;
       return;
     }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && !e.ctrlKey && !e.metaKey) {
+      // Alt+←→: 選択中の音（なければカーソルの下の音）の長さを、16分ずつ短く・長く（Shift で1拍ずつ）。右端のドラッグと同じ
+      if (panel().hidden || drag || typing()) return;
+      const t = targets();
+      if (!t.length) return;
+      e.preventDefault(); // ブラウザの「戻る」を止める
+      const dd = (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 1 : STEP);
+      const durs = t.map(n => groupDur(n, dd));
+      if (t.every((n, i) => durs[i] === n.dur)) return;
+      t.forEach((n, i) => (n.dur = durs[i]));
+      return commit();
+    }
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.shiftKey) {
       // 選んだ音（なければ全部）の間隔と長さを、2倍に広げる（ゆっくり）/ 半分に詰める（速く）。16分に揃える
       if (panel().hidden || drag || typing()) return;
