@@ -18,7 +18,10 @@ type Drag =
   | { kind: 'new'; midi: number; col: number; end: number }
   | { kind: 'move'; note: Note; grab: number; midi: number; start: number; moved: boolean; copy: boolean }
   | { kind: 'resize'; note: Note; dur: number }
-  | { kind: 'select'; c0: number; m0: number; c1: number; m1: number }; // Shift+ドラッグで囲んでいる範囲（列, 音）
+  | { kind: 'select'; c0: number; m0: number; c1: number; m1: number } // Shift+ドラッグで囲んでいる範囲（列, 音）
+  // 選択中の音をまとめて動かす（拍 dt・音の高さ dp だけずらす。copy なら複製）/ まとめて長さを変える（dd だけ伸ばす）。元の音は動かし終わるまでそのまま
+  | { kind: 'gmove'; notes: Note[]; col0: number; midi0: number; dt: number; dp: number; copy: boolean }
+  | { kind: 'gresize'; notes: Note[]; col0: number; dd: number };
 let drag: Drag | null = null;
 let hover: PointerEvent | null = null; // 直近のカーソル位置（コピー元と貼り付け先に使う）
 let clip: Note[] = []; // コピーした音
@@ -86,8 +89,10 @@ function draw(): void {
     ctx.fill();
     ctx.globalAlpha = 1;
   };
+  const d = drag;
+  const lifted = d?.kind === 'gmove' && !d.copy ? d.notes : []; // 持ち上げて動かしている最中の元の音は薄くする
   state.phraseNotes.forEach(n => {
-    box(n.midi, n.start, n.dur, 0.2 + 0.8 * n.vel); // 強い音ほど濃く
+    box(n.midi, n.start, n.dur, (0.2 + 0.8 * n.vel) * (lifted.includes(n) ? 0.3 : 1)); // 強い音ほど濃く
     if (!selected.has(n)) return;
     ctx.strokeStyle = cssVar('--orange');
     ctx.lineWidth = 2;
@@ -109,6 +114,21 @@ function draw(): void {
   if (drag?.kind === 'new') box(drag.midi, drag.col * STEP, (drag.end - drag.col + 1) * STEP, 0.6);
   if (drag?.kind === 'move') box(drag.midi, drag.start, drag.note.dur, 0.85);
   if (drag?.kind === 'resize') box(drag.note.midi, drag.note.start, drag.dur, 0.85);
+  if (d?.kind === 'gmove') d.notes.forEach(n => box(n.midi + d.dp, n.start + d.dt, n.dur, 0.85));
+  if (d?.kind === 'gresize') d.notes.forEach(n => box(n.midi, n.start, groupDur(n, d.dd), 0.85));
+}
+
+/** まとめて長さを変えたときの、1つの音の長さ（16分より短くせず、2小節の終わりを超えない）。 */
+const groupDur = (n: Note, dd: number): number => Math.min(8 - n.start, Math.max(STEP, n.dur + dd));
+
+/** 音の集まりが占める範囲（拍・音の高さ）。まとめて動かすとき、はみ出さないよう収めるのに使う。 */
+function span(ns: Note[]): { t0: number; end: number; min: number; max: number } {
+  return {
+    t0: Math.min(...ns.map(n => n.start)),
+    end: Math.max(...ns.map(n => n.start + n.dur)),
+    min: Math.min(...ns.map(n => n.midi)),
+    max: Math.max(...ns.map(n => n.midi))
+  };
 }
 
 /** 画面上の位置 → { 音, 列 }（音名欄の上なら null）。 */
@@ -294,12 +314,31 @@ export function initEditor(): void {
       moved.forEach(m => Object.assign(m.n, { start: m.start, dur: m.dur }));
       return commit();
     }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey) {
+      // ←→: 選択中の音（なければカーソルの下の音）を、16分ずつ左右（時間方向）へ動かす
+      if (panel().hidden || drag || typing()) return;
+      const t = targets();
+      if (!t.length) return;
+      e.preventDefault();
+      const dt = Math.max(-span(t).t0, Math.min(e.key === 'ArrowRight' ? STEP : -STEP, 8 - span(t).end));
+      if (!dt) return;
+      t.forEach(n => (n.start += dt));
+      return commit();
+    }
     if (panel().hidden || drag || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     if (key === 'z' || key === 'y') {
       // Ctrl+Z で元に戻す、Ctrl+Shift+Z / Ctrl+Y でやり直す
       e.preventDefault();
       return key === 'y' || e.shiftKey ? restore(redoStack, undoStack) : restore(undoStack, redoStack);
+    }
+    if (key === 'a') {
+      // 全選択
+      e.preventDefault();
+      selected.clear();
+      state.phraseNotes.forEach(n => selected.add(n));
+      $('recStatusText').textContent = `${selected.size}音を選択中。ドラッグでまとめて動かせます`;
+      return draw();
     }
     if (!hover) return;
     if (key === 'c') {
@@ -346,6 +385,16 @@ export function initEditor(): void {
       c.setPointerCapture(e.pointerId);
       return draw();
     }
+    if (hit && selected.size > 1 && selected.has(state.phraseNotes[hit.index])) {
+      // 選択中の音をつかんだ: 選んだ音を全部まとめて、動かす / 右端なら長さを変える / Alt・Ctrl で複製
+      const notes = state.phraseNotes.filter(n => selected.has(n));
+      drag = hit.onEdge
+        ? { kind: 'gresize', notes, col0: p.col, dd: 0 }
+        : { kind: 'gmove', notes, col0: p.col, midi0: p.midi, dt: 0, dp: 0, copy: e.altKey || e.ctrlKey };
+      c.setPointerCapture(e.pointerId);
+      audition(p.midi);
+      return draw();
+    }
     selected.clear();
     if (hit) {
       // 既存の音: 右端なら長さを変える。それ以外は持ち上げる（動かせば移動、動かさずに離せば消す）
@@ -378,6 +427,14 @@ export function initEditor(): void {
       drag.m1 = p.midi;
     } else if (drag.kind === 'resize') {
       drag.dur = Math.min(8 - drag.note.start, Math.max(STEP, (p.col + 1) * STEP - drag.note.start));
+    } else if (drag.kind === 'gmove') {
+      const s = span(drag.notes);
+      drag.dt = Math.max(-s.t0, Math.min((p.col - drag.col0) * STEP, 8 - s.end)); // 2小節の外へ出さない
+      const dp = Math.max(lo - s.min, Math.min(p.midi - drag.midi0, hi - s.max)); // 画面の音域の外へ出さない
+      if (dp !== drag.dp) audition(drag.notes[0].midi + dp, drag.notes[0].vel);
+      drag.dp = dp;
+    } else if (drag.kind === 'gresize') {
+      drag.dd = (p.col - drag.col0) * STEP;
     } else {
       const start = Math.min(8 - drag.note.dur, Math.max(0, (p.col - drag.grab) * STEP));
       if (p.midi !== drag.midi) audition(p.midi);
@@ -400,6 +457,23 @@ export function initEditor(): void {
       }
       $('recStatusText').textContent = `${selected.size}音を選択中。Ctrl+C でコピーできます`;
       return draw();
+    }
+    if (d.kind === 'gmove') {
+      if (!d.dt && !d.dp) return draw(); // 動かさずに離したら、何もしない（選択もそのまま）
+      if (d.copy) {
+        const copies = d.notes.map(n => ({ ...n, start: n.start + d.dt, midi: n.midi + d.dp }));
+        state.phraseNotes.push(...copies);
+        selected.clear();
+        copies.forEach(n => selected.add(n)); // できた複製を選択に切り替える
+      } else {
+        d.notes.forEach(n => Object.assign(n, { start: n.start + d.dt, midi: n.midi + d.dp }));
+      }
+      return commit();
+    }
+    if (d.kind === 'gresize') {
+      if (!d.dd) return draw();
+      d.notes.forEach(n => (n.dur = groupDur(n, d.dd)));
+      return commit();
     }
     if (d.kind === 'new') {
       state.phraseNotes.push({ midi: d.midi, start: d.col * STEP, dur: (d.end - d.col + 1) * STEP, vel: 0.85 });
