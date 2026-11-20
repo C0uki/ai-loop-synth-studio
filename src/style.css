@@ -230,7 +230,11 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius
 .popover-head .btn { margin-left: auto; }
 .popover-head .caption + .btn { margin-left: 0; }
 .popover-head h2 + .caption { margin-left: 4px; }
-.editor-actions { margin-left: auto; display: flex; gap: 8px; }
+.editor-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.editor-tempo { display: flex; align-items: center; gap: 8px; margin-right: 6px; font-size: 13px; }
+.editor-tempo input { width: 110px; }
+.editor-tempo .num { min-width: 66px; text-align: right; }
+.editor-help { margin: 0 0 10px; line-height: 1.6; }
 .popover-head .editor-actions .btn { margin-left: 0; }
 .editor-canvas { display: block; width: 100%; min-width: 0; max-width: 100%; height: min(380px, 52vh); border-radius: 12px; background: var(--inset); touch-action: none; cursor: crosshair; }
 .guide-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: 1fr; }

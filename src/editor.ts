@@ -87,7 +87,7 @@ function draw(): void {
     ctx.globalAlpha = 1;
   };
   state.phraseNotes.forEach(n => {
-    box(n.midi, n.start, n.dur, 1);
+    box(n.midi, n.start, n.dur, 0.2 + 0.8 * n.vel); // 強い音ほど濃く
     if (!selected.has(n)) return;
     ctx.strokeStyle = cssVar('--orange');
     ctx.lineWidth = 2;
@@ -174,9 +174,28 @@ function apply(): void {
   }
 }
 
-function audition(midi: number): void {
-  playLiveNote(midi, 0.8);
+function audition(midi: number, vel = 0.8): void {
+  playLiveNote(midi, vel);
   setTimeout(() => releaseLiveNote(midi, true), 250);
+}
+
+/** 高さ・強さを変える対象: 選択中の音。なければカーソルの下の音（選択して、続けて操作できるようにする）。 */
+function targets(): Note[] {
+  const sel = state.phraseNotes.filter(n => selected.has(n));
+  if (sel.length) return sel;
+  const hit = hover && noteAt(hover);
+  if (!hit) return [];
+  const n = state.phraseNotes[hit.index];
+  selected.add(n);
+  return [n];
+}
+
+/** 文字入力やスライダーを操作中は、↑↓などをそちらに譲る。 */
+const typing = (): boolean => ['SELECT', 'INPUT'].includes(document.activeElement?.tagName ?? '');
+
+function syncBpm(): void {
+  $<HTMLInputElement>('editorBpm').value = $<HTMLInputElement>('bpmSlider').value;
+  $('editorBpmLabel').textContent = $<HTMLInputElement>('bpmSlider').value;
 }
 
 function open(): void {
@@ -184,6 +203,7 @@ function open(): void {
     showToast('録音中です。先に録音を止めてください');
     return;
   }
+  syncBpm();
   selected.clear();
   undoStack.length = redoStack.length = 0; // 録音やサンプル読み込みで音が変わっていることがあるので、履歴は開くたびに作り直す
   last = snap();
@@ -204,6 +224,15 @@ export function initEditor(): void {
     selected.clear();
     commit();
   });
+  // テンポ: 画面の本体のスライダーと同じものを、打ち込みの画面からも動かせるようにする
+  const bpmMain = $<HTMLInputElement>('bpmSlider');
+  const bpmHere = $<HTMLInputElement>('editorBpm');
+  bpmMain.addEventListener('input', syncBpm);
+  bpmHere.addEventListener('input', () => {
+    bpmMain.value = bpmHere.value;
+    bpmMain.dispatchEvent(new Event('input')); // 本体側の処理（テンポの反映）をそのまま使う
+  });
+  bpmHere.addEventListener('change', () => bpmHere.blur()); // 触ったあとも↑↓などの鍵を音に使えるように
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') return close();
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -220,21 +249,49 @@ export function initEditor(): void {
     }
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       // 選択中の音（なければカーソルの下の音）の高さを、↑↓で半音ずつ、Shift で1オクターブ動かす
-      const tag = document.activeElement?.tagName;
-      if (panel().hidden || drag || tag === 'SELECT' || tag === 'INPUT') return;
-      const targets = state.phraseNotes.filter(n => selected.has(n));
-      const hit = hover && noteAt(hover);
-      if (!targets.length && hit) {
-        targets.push(state.phraseNotes[hit.index]);
-        selected.add(targets[0]); // 音がカーソルから離れても、続けて動かせるように選択しておく
-      }
-      if (!targets.length) return;
+      if (panel().hidden || drag || typing()) return;
+      const t = targets();
+      if (!t.length) return;
       e.preventDefault();
       const step = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1);
-      const dp = Math.max(lo - Math.min(...targets.map(n => n.midi)), Math.min(step, hi - Math.max(...targets.map(n => n.midi)))); // 画面の範囲内に収める
+      const dp = Math.max(lo - Math.min(...t.map(n => n.midi)), Math.min(step, hi - Math.max(...t.map(n => n.midi)))); // 画面の範囲内に収める
       if (!dp) return;
-      targets.forEach(n => (n.midi += dp));
-      audition(targets[0].midi);
+      t.forEach(n => (n.midi += dp));
+      audition(t[0].midi, t[0].vel);
+      return commit();
+    }
+    if (e.key === 'PageUp' || e.key === 'PageDown') {
+      // 音の強さ（ベロシティ）を 10% ずつ変える。強い音ほど濃く表示される
+      if (panel().hidden || drag || typing()) return;
+      const t = targets();
+      if (!t.length) return;
+      e.preventDefault();
+      const d = e.key === 'PageUp' ? 0.1 : -0.1;
+      const before = t.map(n => n.vel);
+      t.forEach(n => (n.vel = Math.min(1, Math.max(0.1, Math.round((n.vel + d) * 100) / 100))));
+      if (t.every((n, i) => n.vel === before[i])) return;
+      audition(t[0].midi, t[0].vel);
+      commit();
+      $('recStatusText').textContent = `音の強さ: ${Math.round(t[0].vel * 100)}%`;
+      return;
+    }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.shiftKey) {
+      // 選んだ音（なければ全部）の間隔と長さを、2倍に広げる（ゆっくり）/ 半分に詰める（速く）。16分に揃える
+      if (panel().hidden || drag || typing()) return;
+      const sel = state.phraseNotes.filter(n => selected.has(n));
+      const t = sel.length ? sel : state.phraseNotes;
+      if (!t.length) return;
+      e.preventDefault();
+      const f = e.key === 'ArrowLeft' ? 0.5 : 2;
+      const q = (x: number): number => Math.round(x / STEP) * STEP;
+      const t0 = Math.min(...t.map(n => n.start));
+      const moved = t.map(n => ({ n, start: t0 + q((n.start - t0) * f), dur: Math.max(STEP, q(n.dur * f)) }));
+      if (moved.some(m => m.start + m.dur > 8 + 1e-6)) {
+        $('recStatusText').textContent = 'これ以上は広げられません（2小節を超えます）';
+        return;
+      }
+      if (moved.every(m => m.start === m.n.start && m.dur === m.n.dur)) return;
+      moved.forEach(m => Object.assign(m.n, { start: m.start, dur: m.dur }));
       return commit();
     }
     if (panel().hidden || drag || !(e.ctrlKey || e.metaKey)) return;
